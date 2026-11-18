@@ -6,7 +6,7 @@ function bytes(n=0){const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1000 
 let data,view='overview',diskMode='files';
 function generatedProjects(){return data.projects.filter(p=>p.generated>0).sort((a,b)=>b.generated-a.generated);}
 const names={overview:'Panoramica',projects:'Progetti',folders:'Microfile',storage:'Spazio su disco'};
-const descriptions={overview:'La mappa dei tuoi progetti e dello spazio che occupano.',projects:'Apri una scheda per ritrovare percorsi, guide e note delle chat.',folders:'Le prime 250 cartelle per numero di file sotto 4 KiB. Il conteggio riguarda i file direttamente nella cartella.',storage:'Esamina i file da 10 MB in su, ordinati dal più pesante.'};
+const descriptions={overview:'La mappa dei tuoi progetti e dello spazio che occupano.',projects:'Apri una scheda per ritrovare percorsi, guide e note delle chat.',folders:'Le prime 250 cartelle per numero di file sotto 4 KiB. Il conteggio riguarda i file direttamente nella cartella.',storage:'Esamina i file da 10 MB in su e lo spazio occupato da dipendenze e build.'};
 function render(){
   const q=$('search').value.toLowerCase(),storage=view==='storage',disk=storage && diskMode==='files',deps=storage && diskMode==='generated',folders=view==='folders';
   $('diskMode').hidden=!storage;
@@ -15,7 +15,7 @@ function render(){
   $('workspace').textContent=data.date?'Indice locale · '+new Date(data.date).toLocaleString('it-IT'):'Indice locale';
   $('pick').disabled=!data.roots.length;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-  const metrics=[['Spazio indicizzato',bytes(data.bytes),fmt(data.count)+' file censiti'],['Progetti',fmt(data.projects.length),fmt(data.roots.length)+' cartelle radice'],['Microfile',fmt(data.small),'File inferiori a 4 KiB']];
+  const metrics=[['Dimensione logica',bytes(data.bytes),fmt(data.count)+' file censiti'],['Progetti',fmt(data.projects.length),fmt(data.roots.length)+' cartelle radice'],['Microfile',fmt(data.small),'File inferiori a 4 KiB']];
   $('stats').innerHTML=metrics.map(([k,v,h])=>'<div class="stat"><small>'+k.toUpperCase()+'</small><strong>'+v+'</strong><span>'+h+'</span></div>').join('');
   $('listTitle').textContent=deps?'Spazio per progetto':folders?'Cartelle con microfile':disk?'File grandi':'Catalogo progetti';
   $('search').placeholder=folders?'Cerca cartelle…':disk?'Cerca file…':'Cerca progetti…';
