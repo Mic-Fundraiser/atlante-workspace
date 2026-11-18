@@ -50,3 +50,23 @@ test('importa progetti locali e remoti, classifica microfile e limita il contest
   assert.ok(run('pack','Quaderno').trimEnd().length<=1800);
   assert.match(run('pack','cervello:remoto'),/Raccolta storica/);
 });
+
+test('estratti mirati riusati solo nella stessa chat e invalidati dopo una modifica',async t=>{
+  const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'atlante-compact-'));
+  t.after(()=>fs.rm(tmp,{recursive:true,force:true}));
+  const root=path.join(tmp,'quaderno');await fs.mkdir(root);
+  await fs.writeFile(path.join(root,'package.json'),'{}');
+  const file=path.join(root,'manuale.md');
+  await fs.writeFile(file,'documentazione del servizio\n'.repeat(120)+'ricerca: fatture\n');
+  const env={...process.env,ATLANTE_HOME:path.join(tmp,'state')};
+  const run=(...args)=>execFileSync(process.execPath,[fileURLToPath(new URL('./atlante.mjs',import.meta.url)),...args],{env,encoding:'utf8'});
+  run('scan',root);
+  assert.match(run('focus','quaderno'),/quaderno/);
+  const read=id=>run('excerpt','quaderno','manuale.md','fatture',id);
+  assert.match(read('a'),/121 \| ricerca/);
+  assert.match(read('a'),/invariato/);
+  assert.match(read('b'),/121 \| ricerca/);
+  await fs.appendFile(file,'fatture aggiornate\n');assert.match(read('a'),/fatture aggiornate/);
+  const events=(await fs.readFile(path.join(env.ATLANTE_HOME,'token-use.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);
+  assert.ok(events.every(e=>e.compact<=e.full && e.day));assert.equal(events.filter(e=>e.kind==='reuse').length,1);
+});

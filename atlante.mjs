@@ -1,3 +1,4 @@
+import {emitCompact,excerpt,filterInput} from './compact.mjs';
 import {compare,fullContext,recordUse,usage} from './tokens.mjs';
 import {projectContext} from './dist/context.js';
 import {readCervello} from './cervello.mjs';
@@ -95,7 +96,7 @@ async function install() {
   const files=[path.join(process.env.CODEX_HOME||path.join(dir,'.codex'),'AGENTS.md'),path.join(process.env.CLAUDE_CONFIG_DIR||path.join(dir,'.claude'),'CLAUDE.md'),path.join(dir,'.gemini','GEMINI.md')];
   const begin='<!-- atlante:start -->',end='<!-- atlante:end -->';
   const quoted="'"+script.replaceAll("'","'\\''")+"'";
-  const rule=[begin,'## Atlante — indice locale dei progetti', 'A ogni nuova chat esegui prima `node '+quoted+' brief`. Per un lavoro su un progetto usa `find <parola>` e poi `pack <percorso>` (massimo 1.800 caratteri, usa `ctx` per approfondire) con lo stesso comando. Consulta solo le guide pertinenti. Registra cambiamenti durevoli con `log <percorso> <nota>`; aggiorna la scansione se sono cambiati i progetti. Le note devono essere prive di segreti.',end].join('\n');
+  const rule=[begin,'## Atlante — indice locale dei progetti', 'A ogni nuova chat esegui prima `node '+quoted+' brief`. Per un lavoro su un progetto usa `find <parola>` e poi `pack <percorso>` (massimo 1.800 caratteri, usa `ctx` per approfondire) con lo stesso comando. Per individuare e caricare il contesto in un solo passaggio usa `focus PAROLE`. Per cercare nel testo usa `excerpt PROGETTO FILE PAROLA ID_CHAT`: scegli un ID nuovo per ciascuna chat e cambialo dopo perdita di contesto. Per output ripetitivi usa `filter` via stdin preservando lo stato del comando originale. Consulta solo le guide pertinenti. Registra cambiamenti durevoli con `log <percorso> <nota>`; aggiorna la scansione se sono cambiati i progetti. Le note devono essere prive di segreti.',end].join('\n');
   for(const file of files) {
     await fs.mkdir(path.dirname(file),{recursive:true});
     let old='';
@@ -124,6 +125,9 @@ async function serve() {
     if(req.headers.host!==host || req.headers.origin && req.headers.origin!=='http://'+host) {res.writeHead(403).end();return;}
     try {
       const url=new URL(req.url,'http://'+host);
+      if(url.pathname==='/api/usage' && req.method==='GET') {
+        res.setHeader('Content-Type','application/json');res.end(JSON.stringify(await usage(state)));return;
+      }
       if(url.pathname==='/api/tokens' && req.method==='GET') {
         const c=await load(), history=await notes();
         const rows=c.projects.map(p=>({id:p.id,...compare(p,history)}));
@@ -159,7 +163,7 @@ async function serve() {
         if(!Array.isArray(roots) || !roots.length || roots.some(r=>typeof r!=='string' || !path.isAbsolute(r))) throw Error('Inserisci un percorso assoluto per riga.');
         await scan(roots);res.end('ok');return;
       }
-      const assets=new Map([['/',['index.html','text/html']],['/core.jpg',['core.jpg','image/jpeg']],['/context.js',['context.js','text/javascript']],['/app.js',['app.js','text/javascript']],['/style.css',['style.css','text/css']]]);
+      const assets=new Map([['/',['index.html','text/html']],['/core.jpg',['core.jpg','image/jpeg']],['/three.module.js',['../node_modules/three/build/three.module.js','text/javascript']],['/three.core.js',['../node_modules/three/build/three.core.js','text/javascript']],['/room.js',['../node_modules/three/examples/jsm/environments/RoomEnvironment.js','text/javascript']],['/scene.js',['scene.js','text/javascript']],['/context.js',['context.js','text/javascript']],['/app.js',['app.js','text/javascript']],['/style.css',['style.css','text/css']]]);
       const asset=assets.get(url.pathname);
       if(!asset || req.method!=='GET'){res.writeHead(404).end();return;}
       res.setHeader('Content-Type',asset[1]+'; charset=utf-8');
@@ -175,22 +179,41 @@ try {
     console.log(brief(await scan(catalog.roots,catalog)));
   } else if(command==='scan') console.log(brief(await scan(args.length?args:c.roots)));
   else if(command==='brief') console.log(brief(c));
+  else if(command==='focus') {
+    const terms=[...new Set(args.join(' ').toLowerCase().split(/\s+/).filter(Boolean))];
+    if(!terms.length) throw Error('Uso: focus PAROLE');
+    const history=await notes();
+    const results=c.projects.map(p=>{
+      const title=(p.name+' '+p.id).toLowerCase();
+      const body=[p.description,...p.types,...history.filter(n=>n.id===p.id).map(n=>n.text)].join(' ').toLowerCase();
+      const ranks=terms.map(t=>title.includes(t)?3:body.includes(t)?1:0);
+      return {p,score:ranks.every(Boolean)?ranks.reduce((a,b)=>a+b,0):0};
+    }).filter(r=>r.score).sort((a,b)=>b.score-a.score||a.p.id.localeCompare(b.p.id));
+    if(!results.length) console.log('Nessun progetto corrispondente.');
+    else {
+      const raw=results.map(({p})=>fullContext(p,history)).join('\n')+'\n';
+      const compact=[results.length+' progetti corrispondenti',projectContext(results[0].p,history),...results.slice(1,4).map(({p})=>p.name+' · '+p.id)].join('\n')+'\n';
+      await emitCompact(state,raw,compact,'focus');
+    }
+  }
   else if(command==='find') {
     const q=args.join(' ').toLowerCase();
     const history=await notes();
     const ids=new Set(history.filter(n=>n.text.toLowerCase().includes(q)).map(n=>n.id));
     const hits=c.projects.filter(p=>[p.id,p.name,p.description,p.brainId,...p.types].join(' ').toLowerCase().includes(q)||ids.has(p.id));
     console.log(hits.length+' risultati\n'+hits.slice(0,15).map(p=>p.id+' | '+p.types.join(', ')).join('\n'));
-  } else if(command==='ctx'||command==='pack'||command==='log') {
+  } else if(command==='ctx'||command==='pack'||command==='excerpt'||command==='log') {
     const matches=c.projects.filter(p=>p.id===args[0]||p.name===args[0]);
     if(matches.length!==1) throw Error('Usa find e indica un percorso univoco.');
     const p=matches[0];
-    if(command==='pack') {
+    if(command==='excerpt') await excerpt(state,p,...args.slice(1));
+    else if(command==='pack') {
       const history=await notes(); console.log(projectContext(p,history)); await recordUse(state,compare(p,history));
     }
     else if(command==='ctx') console.log(fullContext(p,await notes()));
     else {const text=args.slice(1).join(' ').trim();if(!text||text.length>500)throw Error('Nota da 1 a 500 caratteri.');await fs.appendFile(notesFile,JSON.stringify({id:p.id,date:new Date().toISOString(),text})+'\n',{mode:0o600});}
-  } else if(command==='install') await install();
+  } else if(command==='filter') await filterInput(state);
+  else if(command==='install') await install();
   else if(command==='serve') await serve();
   else throw Error('Comandi: scan, cervello, install, brief, find, pack, ctx, log, serve');
 } catch(e){console.error(e.message);process.exitCode=1;}

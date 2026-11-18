@@ -15,23 +15,32 @@ function renderTokens(){
   const ratio=full?compact/full:0;
   const u=measurements.usage;
   $('seeTokens').textContent='Risparmio token　'+fmt(full?Math.round((1-ratio)*100):0)+'%　↗';
-  $('tokenReport').innerHTML='<div class="token-number">'+fmt(Math.round((1-ratio)*100)*(full?1:0))+'%<small> riduzione sul catalogo</small></div>'+
-    '<div class="comparison"><span>Schede complete <b>'+fmt(full)+' token</b></span><meter min="0" max="1" value="1"></meter>'+
-    '<span>Schede brevi <b>'+fmt(compact)+' token</b></span><meter min="0" max="1" value="'+ratio+'"></meter></div>'+
-    '<p>Una lettura per progetto. Sugli utilizzi registrati: '+fmt(u.uses)+' schede brevi richieste o copiate, '+fmt(u.full-u.compact)+' token in meno rispetto alle rispettive schede complete. Il conteggio riguarda il testo delle schede.</p>';
+  const pct=full?Math.round(1000*(1-ratio))/10:0;
+  const namesById=new Map(data.projects.map(p=>[p.id,p.name]));
+  const ordered=measurements.rows.map(r=>({id:r.id,n:r.full-r.compact})).sort((a,b)=>b.n-a.n).slice(0,5);
+  const bars=(rows,max)=>rows.map(([name,n])=>'<div class="hbar"><span>'+esc(name)+'</span><b>'+fmt(n)+'</b><i style="width:'+Math.max(0,100*n/(max||1))+'%"></i></div>').join('');
+  const days=Array.from({length:7},(_,i)=>{const d=new Date();d.setUTCDate(d.getUTCDate()-6+i);const day=d.toISOString().slice(0,10);return [day,u.days?.[day]||0];});
+  const peak=Math.max(1,...days.map(d=>d[1]));
+  const byKind=Object.entries(u.kinds||{}).sort((a,b)=>b[1]-a[1]);
+  const kinds={pack:'Schede brevi',filter:'Output ripetuto',excerpt:'Estratti mirati',reuse:'Riletture evitate',focus:'Ricerca per intento'};
+  $('tokenReport').innerHTML=
+    '<article><h3>Riduzione sul catalogo</h3><div class="donut" style="--portion:'+pct+'%"><strong>'+fmt(pct)+'%</strong></div><p>'+fmt(full-compact)+' token in meno su una lettura per progetto.</p></article>'+
+    '<article><h3>Prima e dopo</h3>'+bars([['Schede complete',full],['Schede brevi',compact]],full)+'<p>'+fmt(measurements.rows.length)+' progetti · token di ingresso</p></article>'+
+    '<article><h3>Progetti con più risparmio</h3>'+bars(ordered.map(r=>[namesById.get(r.id)||r.id,r.n]),ordered[0]?.n)+'</article>'+
+    '<article><h3>Ultimi 7 giorni</h3><div class="week">'+days.map(([d,n])=>'<div title="'+d+' · '+fmt(n)+' token"><b>'+fmt(n)+'</b><i style="height:'+Math.round(60*n/peak)+'px"></i><small>'+d.slice(8)+'/'+d.slice(5,7)+'</small></div>').join('')+'</div><p>Token evitati sugli utilizzi datati · UTC</p></article>'+
+    '<article><h3>Risparmio per operazione</h3>'+(byKind.length?bars(byKind.map(([k,n])=>[kinds[k]||k,n]),byKind[0][1]):'<p>La prima operazione registrata comparirà qui.</p>')+'</article>'+
+    '<article><h3>Utilizzo registrato</h3><strong class="actual">'+fmt(u.full-u.compact)+'</strong><p>token in meno su '+fmt(u.uses)+' operazioni. Da '+fmt(u.full)+' token di riferimento a '+fmt(u.compact)+' restituiti.</p></article>';
+
 }
 async function loadTokens(){
   const r=await fetch('/api/tokens',{cache:'no-store'});
   if(!r.ok) throw Error(await r.text());
   measurements=await r.json();renderTokens();
 }
-$('seeTokens').onclick=async()=>{
-  const panel=$('tokenPanel');panel.hidden=!panel.hidden;
-  $('seeTokens').setAttribute('aria-expanded',String(!panel.hidden));
-  if(!panel.hidden){panel.focus();try{await loadTokens();}catch(e){$('tokenReport').textContent=e.message;}}
-};
+$('seeTokens').onclick=()=>{const panel=$('tokenPanel');panel.hidden=false;panel.focus({preventScroll:true});panel.scrollIntoView({block:'start'});};
 function render(){
   const q=$('search').value.toLowerCase(),storage=view==='storage',disk=storage && diskMode==='files',deps=storage && diskMode==='generated',folders=view==='folders';
+  $('tokenPanel').hidden=view!=='overview';
   $('diskMode').hidden=!storage;
   document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===diskMode)));
   $('title').textContent=names[view];$('crumb').textContent=view==='overview'?'Panoramica':names[view];$('subtitle').textContent=descriptions[view];
@@ -84,3 +93,11 @@ $('roots').onclick=()=>{
   $('modal').showModal();
 };
 refresh().catch(e=>{$('status').textContent=e.message;});
+
+setInterval(async()=>{
+  if(document.hidden || !measurements || $('tokenPanel').hidden)return;
+  try{
+    const response=await fetch('/api/usage',{cache:'no-store'});
+    if(response.ok){measurements.usage=await response.json();renderTokens();}
+  }catch{}
+},20000);
