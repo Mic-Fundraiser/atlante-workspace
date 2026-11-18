@@ -4,7 +4,7 @@ Una web app locale e un indice condiviso per chi usa più agenti di coding. Inco
 
 ## Prima configurazione per l’agente
 
-1. Clona questo repository in una cartella stabile. Usa Node.js 20 o successivo. Il progetto usa solo moduli standard.
+1. Clona questo repository in una cartella stabile. Usa Node.js 20 o successivo. Dalla cartella del clone esegui `npm ci` per installare il tokenizer locale.
 2. Individua con l’utente le cartelle che contengono i suoi lavori. Se la richiesta indica già le radici, usale direttamente. Esegui dalla copia locale:
    ```sh
    node atlante.mjs scan "/percorso/dei/progetti" "/altra/raccolta"
@@ -36,6 +36,10 @@ La dashboard mostra progetti annidati, dimensioni logiche, file sotto 4 KiB e fi
 Dal browser puoi esaminare un file grande e confermarne lo spostamento nel Cestino su macOS o Linux con gio. Lo svuotamento del Cestino resta manuale. Il server ascolta su 127.0.0.1. I dati sono salvati in ~/.atlante, separati dal clone. Usa ATLANTE_HOME per un archivio alternativo, impostandolo in tutti gli ambienti interessati. PORT cambia la porta web.
 
 Il link GitHub permette a un agente di trovare le istruzioni. Il primo avvio richiede un agente con terminale e accesso alla macchina. Le regole globali sono istruzioni per il modello: la loro applicazione dipende dal client, dalle sue impostazioni e dai permessi. Ogni macchina o profilo va configurato una volta.
+
+## Risparmio token
+
+**Analisi token** confronta il testo esatto di `ctx` e `pack` con o200k_base, interamente sul dispositivo. La percentuale sul catalogo simula una lettura di ogni progetto in entrambi i formati. Il contatore degli utilizzi considera solo i comandi pack e le copie della scheda dal browser dopo l’aggiornamento. Registra esclusivamente i due conteggi in ~/.atlante/token-use.jsonl. Sono confronti sul testo in ingresso. Cronologia, istruzioni di sistema, risposte e fatturazione del provider restano fuori dal calcolo. I tokenizer di altri modelli possono produrre valori diversi.
 
 ## Sviluppo
 

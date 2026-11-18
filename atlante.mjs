@@ -1,3 +1,4 @@
+import {compare,fullContext,recordUse,usage} from './tokens.mjs';
 import {projectContext} from './dist/context.js';
 import {readCervello} from './cervello.mjs';
 import fs from 'node:fs/promises';
@@ -123,6 +124,17 @@ async function serve() {
     if(req.headers.host!==host || req.headers.origin && req.headers.origin!=='http://'+host) {res.writeHead(403).end();return;}
     try {
       const url=new URL(req.url,'http://'+host);
+      if(url.pathname==='/api/tokens' && req.method==='GET') {
+        const c=await load(), history=await notes();
+        const rows=c.projects.map(p=>({id:p.id,...compare(p,history)}));
+        res.setHeader('Content-Type','application/json');
+        res.end(JSON.stringify({rows,usage:await usage(state)}));return;
+      }
+      if(url.pathname==='/api/copied' && req.method==='POST' && req.headers['x-atlante']==='local') {
+        const c=await load(),p=c.projects.find(p=>p.id===url.searchParams.get('id'));
+        if(!p) throw Error('Progetto assente.');
+        await recordUse(state,compare(p,await notes())); res.end('ok');return;
+      }
       if(url.pathname==='/api/index' && req.method==='GET') {
         const c=await load(); res.setHeader('Content-Type','application/json');res.end(JSON.stringify({...c,notes:await notes()}));return;
       }
@@ -147,7 +159,7 @@ async function serve() {
         if(!Array.isArray(roots) || !roots.length || roots.some(r=>typeof r!=='string' || !path.isAbsolute(r))) throw Error('Inserisci un percorso assoluto per riga.');
         await scan(roots);res.end('ok');return;
       }
-      const assets=new Map([['/',['index.html','text/html']],['/context.js',['context.js','text/javascript']],['/app.js',['app.js','text/javascript']],['/style.css',['style.css','text/css']]]);
+      const assets=new Map([['/',['index.html','text/html']],['/core.jpg',['core.jpg','image/jpeg']],['/context.js',['context.js','text/javascript']],['/app.js',['app.js','text/javascript']],['/style.css',['style.css','text/css']]]);
       const asset=assets.get(url.pathname);
       if(!asset || req.method!=='GET'){res.writeHead(404).end();return;}
       res.setHeader('Content-Type',asset[1]+'; charset=utf-8');
@@ -173,8 +185,10 @@ try {
     const matches=c.projects.filter(p=>p.id===args[0]||p.name===args[0]);
     if(matches.length!==1) throw Error('Usa find e indica un percorso univoco.');
     const p=matches[0];
-    if(command==='pack') console.log(projectContext(p,await notes()));
-    else if(command==='ctx') console.log(JSON.stringify({...p,notes:(await notes()).filter(n=>n.id===p.id).slice(-5)},null,2));
+    if(command==='pack') {
+      const history=await notes(); console.log(projectContext(p,history)); await recordUse(state,compare(p,history));
+    }
+    else if(command==='ctx') console.log(fullContext(p,await notes()));
     else {const text=args.slice(1).join(' ').trim();if(!text||text.length>500)throw Error('Nota da 1 a 500 caratteri.');await fs.appendFile(notesFile,JSON.stringify({id:p.id,date:new Date().toISOString(),text})+'\n',{mode:0o600});}
   } else if(command==='install') await install();
   else if(command==='serve') await serve();
