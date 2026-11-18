@@ -44,7 +44,12 @@ async function scan(inputs, catalog = null) {
       const [dir,parent,isGenerated]=pending.pop();
       let entries;
       try { entries=await fs.readdir(dir,{withFileTypes:true}); }
-      catch(e) { if(dir===root) throw e; result.skipped++; continue; }
+      catch(e) {
+        if(dir===root && !catalog) throw e;
+        result.skipped++;
+        if(dir===root) result.unavailable++;
+        continue;
+      }
       let owner=parent;
       const names=entries.filter(e=>e.isFile() || (e.name==='.git' && e.isDirectory())).map(e=>e.name);
       const types=[...new Set(names.filter(n=>markers.has(n)).map(n=>markers.get(n)))];
