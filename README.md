@@ -40,3 +40,9 @@ Il link GitHub permette a un agente di trovare le istruzioni. Il primo avvio ric
 ## Sviluppo
 
 `npm test` verifica scansione, schede, note e aggiornamento delle istruzioni in un ambiente temporaneo. Licenza MIT.
+
+## Importare un catalogo Cervello
+
+Con `node atlante.mjs cervello "/percorso/cervello"` puoi leggere un catalogo esistente. Il formato previsto comprende `dati/progetti.json` (id, nome, descrizione, stack, locale.percorso) e gli elenchi opzionali `cartelle.json` e `archivi.json` (percorso). Atlante scansiona le directory disponibili, conta una sola volta quelle sovrapposte e conserva una scheda ricercabile per i progetti privi di cartella accessibile. Le dimensioni sono logiche. I cataloghi originali restano sul disco dell’utente. Ogni aggiornamento rilegge gli elenchi dalla sorgente.
+
+Dalla dashboard, **Cartelle** mostra le radici e permette di passare a una selezione manuale. In **Spazio su disco → Dipendenze e build** trovi i progetti ordinati per dimensioni delle cartelle generate. **Microfile** ordina le prime 250 cartelle per numero di file direttamente contenuti sotto 4 KiB. Per passare all’AI il contesto di un progetto usa **Copia contesto** o `node atlante.mjs pack <progetto>`. Entrambi applicano lo stesso limite di 1.800 caratteri e danno precedenza alle note più recenti. Il numero di caratteri è misurabile indipendentemente dal tokenizer del modello.

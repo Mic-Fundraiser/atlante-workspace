@@ -27,3 +27,26 @@ test('indice condiviso tra sessioni, note e installazione ripetibile',async t=>{
   assert.equal(await fs.readFile(rules,'utf8'),first);
   assert.match(first,/Regola esistente/);assert.match(first,/brief/);
 });
+
+test('importa progetti locali e remoti, classifica microfile e limita il contesto',async t=>{
+  const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'atlante-import-'));
+  t.after(()=>fs.rm(tmp,{recursive:true,force:true}));
+  const data=path.join(tmp,'cervello','dati');
+  const work=path.join(tmp,'documenti');
+  await fs.mkdir(data,{recursive:true});await fs.mkdir(work);
+  await fs.writeFile(path.join(work,'bozza.txt'),'bozza');
+  await fs.writeFile(path.join(data,'progetti.json'),JSON.stringify([
+    {id:'locale',nome:'Quaderno',locale:{percorso:work}},
+    {id:'remoto',nome:'Archivio',descrizione:'Raccolta storica'}
+  ]));
+  const env={...process.env,ATLANTE_HOME:path.join(tmp,'state')};
+  const run=(...args)=>execFileSync(process.execPath,[fileURLToPath(new URL('./atlante.mjs',import.meta.url)),...args],{env,encoding:'utf8'});
+  run('cervello',path.dirname(data));run('scan');
+  const index=JSON.parse(await fs.readFile(path.join(env.ATLANTE_HOME,'index.json')));
+  assert.equal(index.projects.length,2);
+  assert.equal(index.folders[0].small,1);
+  assert.match(run('find','storica'),/cervello:remoto/);
+  for(let i=0;i<5;i++) run('log','Quaderno','x'.repeat(500));
+  assert.ok(run('pack','Quaderno').trimEnd().length<=1800);
+  assert.match(run('pack','cervello:remoto'),/Raccolta storica/);
+});
